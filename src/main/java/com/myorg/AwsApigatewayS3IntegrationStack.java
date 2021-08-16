@@ -9,7 +9,9 @@ import software.amazon.awscdk.services.apigateway.IntegrationResponse;
 import software.amazon.awscdk.services.apigateway.MethodOptions;
 import software.amazon.awscdk.services.apigateway.MethodResponse;
 import software.amazon.awscdk.services.apigateway.RestApi;
-import software.amazon.awscdk.services.iam.ManagedPolicy;
+import software.amazon.awscdk.services.iam.Effect;
+import software.amazon.awscdk.services.iam.PolicyDocument;
+import software.amazon.awscdk.services.iam.PolicyStatement;
 import software.amazon.awscdk.services.iam.Role;
 import software.amazon.awscdk.services.iam.ServicePrincipal;
 import software.amazon.awscdk.services.iam.ServicePrincipalOpts;
@@ -19,6 +21,7 @@ import software.amazon.awscdk.services.s3.BucketProps;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 public class AwsApigatewayS3IntegrationStack extends Stack {
     public AwsApigatewayS3IntegrationStack(final Construct scope, final String id) {
@@ -32,21 +35,14 @@ public class AwsApigatewayS3IntegrationStack extends Stack {
 
         Role role = Role.Builder.create(this, "ApiGatewayS3Role")
                 .assumedBy(new ServicePrincipal("apigateway.amazonaws.com", ServicePrincipalOpts.builder().build()))
-                .managedPolicies(
-                        List.of(
-                                ManagedPolicy.fromManagedPolicyArn(
-                                        this,
-                                        "AmazonS3ReadOnlyAccess",
-                                        "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess"
-                                )
-                        )
-                )
+                .inlinePolicies(getInlinePoliciesForBucket(bucket))
                 .build();
 
 
         RestApi api = RestApi.Builder.create(this, "Scenarios-API")
                 .restApiName("Scenarios").description("This service services test scenarios.")
                 .build();
+
 
         HashMap<String, String> requestTemplates = new HashMap<>();
         requestTemplates.put("application/json", "" +
@@ -92,5 +88,18 @@ public class AwsApigatewayS3IntegrationStack extends Stack {
                                         MethodResponse.builder().statusCode("400").build(),
                                         MethodResponse.builder().statusCode("500").build()))
                                 .build());
+    }
+
+    private Map<String, ? extends PolicyDocument> getInlinePoliciesForBucket(Bucket bucket) {
+        PolicyDocument readOnlyOnObjects = PolicyDocument.Builder.create().statements(
+                List.of(
+                        PolicyStatement.Builder.create()
+                                .sid("ReadOnlyOnObjects")
+                                .actions(List.of("s3:GetObject"))
+                                .resources(List.of(bucket.getBucketArn() + "/*"))
+                                .effect(Effect.ALLOW)
+                                .build()
+                )).build();
+        return Map.of("ReadOnlyOnObjectsS3", readOnlyOnObjects);
     }
 }
